@@ -22,6 +22,7 @@ data MyFlags
   = MyFlags
   { configFile :: FilePath
   , dryRun :: Bool
+  , tailscaleCmd :: FilePath
   }
 
 main :: IO ()
@@ -33,23 +34,26 @@ main = run =<< execParser opts
             <> header "tailscale-manager")
     myFlags = MyFlags
               <$> argument str (metavar "<configfile.json>")
-              <*> switch (long "dryrun"
+              <*> switch  (long "dryrun"
                           <> help "Dryrun mode")
+              <*> strOption (long "tailscale"
+                             <> help "Path to the tailscale executable"
+                             <> value "tailscale")
 
 run :: MyFlags -> IO ()
-run opts = do
-  config <- loadConfig (configFile opts)
+run flags = do
+  config <- loadConfig (configFile flags)
   tsArgs <- generateTailscaleArgs config
   logger' <- getLogger "tailscale-manager"
   let logger = setLevel INFO logger'
-      escapedArgs = showCommandForUser "tailscale" tsArgs
-  if dryRun opts
+      escapedArgs = showCommandForUser (tailscaleCmd flags) tsArgs
+  if dryRun flags
     then do
-      logL logger WARNING "Dry-run mode enabled.  NOT actually executing commands."
+      logL logger WARNING "Dry-run mode enabled."
       logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
     else do
       logL logger INFO $ "Running: " ++ escapedArgs
-      callProcess "tailscale" tsArgs
+      callProcess (tailscaleCmd flags) tsArgs
 
 -- Parse our config file.  May throw AesonException on failure.
 loadConfig :: FilePath -> IO TSConfig
