@@ -74,6 +74,8 @@ executable tailscale-manager
                  , protolude
                  , aeson
                  , bytestring
+                 , optparse-applicative
+                 , hslogger
 
     -- Directories containing source files.
     hs-source-dirs:   app

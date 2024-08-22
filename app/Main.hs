@@ -14,36 +14,51 @@ import Data.IP (fromSockAddr, IP)
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
 import GHC.IO.Exception (IOException)
 import Network.Socket
-import System.Environment (getArgs, getProgName)
-import System.IO (stderr, hPrint, hPutStrLn)
+import Options.Applicative
+import System.Log.Logger
+
+data MyFlags
+  = MyFlags
+  { configFile :: FilePath
+  , dryRun :: Bool
+  }
 
 main :: IO ()
-main = do
-  argv <- getArgs
-  case argv of
-    [configFile] -> do
-        config <- loadConfig configFile
-        args <- generateArgs config
-        putStrLn $ unwords args
-    _otherwise -> printUsage
+main = run =<< execParser opts
+  where
+    opts = info (myFlags <**> helper)
+           (fullDesc
+            <> progDesc "Tailscale options manager"
+            <> header "tailscale-manager")
+    myFlags = MyFlags
+              <$> argument str (metavar "<configfile.json>")
+              <*> switch (long "dryrun"
+                          <> help "Dryrun mode")
 
-printUsage :: IO ()
-printUsage = do
-  myname <- getProgName
-  hPutStrLn stderr ("USAGE: " ++ myname ++ " <configfile.json>")
+run :: MyFlags -> IO ()
+run opts = do
+  config <- loadConfig (configFile opts)
+  tsArgs <- generateTailscaleArgs config
+  logger <- getLogger "tailscale-manager"
+  if dryRun opts
+    then do
+      logL logger WARNING "Dry-run mode enabled.  NOT actually executing commands."
+      putStrLn (unwords tsArgs)
+    else do
+      undefined
 
-generateArgs :: TSConfig -> IO [String]
-generateArgs config = do
+-- Parse our config file.  May throw AesonException on failure.
+loadConfig :: FilePath -> IO TSConfig
+loadConfig fp = LB.readFile fp >>= throwDecode
+
+generateTailscaleArgs :: TSConfig -> IO [String]
+generateTailscaleArgs config = do
   hostIPs <- resolveHostnames (tsHostRoutes config)
   let mergedRoutes = tsRoutes config ++ map ipToHostRoute hostIPs
   return $ [ "tailscale", "set"
            , "--advertise-routes=" ++ intercalate "," mergedRoutes
            , "--advertise-exit-node=" ++ show (tsAdvertiseExitNode config)
            ] ++ tsExtraArgs config
-
--- Parse our config file.  May throw AesonException on failure.
-loadConfig :: FilePath -> IO TSConfig
-loadConfig fp = LB.readFile fp >>= throwDecode
 
 ipToHostRoute :: IP -> String
 ipToHostRoute ip = show ip ++ "/32"
@@ -56,11 +71,12 @@ resolveHostnames hs = mapM resolveOne hs <&> concat . catMaybes
 -- Prints a message to stderr and returns Nothing if the lookup fails.
 resolveOne :: HostName -> IO (Maybe [IP])
 resolveOne hostname = do
+  logger <- getLogger "resolveOne"
   let hints = defaultHints { addrSocketType = Stream }
   result <- try @IOException $ getAddrInfo (Just hints) (Just hostname) Nothing
   case result of
     Left err -> do
-      hPrint stderr err
+      logL logger WARNING (show err)
       return Nothing
     Right addrInfos ->
       return $ Just (map fst (mapMaybe (fromSockAddr . addrAddress) addrInfos))
