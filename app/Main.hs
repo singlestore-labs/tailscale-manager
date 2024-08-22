@@ -16,6 +16,7 @@ import GHC.IO.Exception (IOException)
 import Network.Socket
 import Options.Applicative
 import System.Log.Logger
+import System.Process (callProcess, showCommandForUser)
 
 data MyFlags
   = MyFlags
@@ -39,13 +40,16 @@ run :: MyFlags -> IO ()
 run opts = do
   config <- loadConfig (configFile opts)
   tsArgs <- generateTailscaleArgs config
-  logger <- getLogger "tailscale-manager"
+  logger' <- getLogger "tailscale-manager"
+  let logger = setLevel INFO logger'
+      escapedArgs = showCommandForUser "tailscale" tsArgs
   if dryRun opts
     then do
       logL logger WARNING "Dry-run mode enabled.  NOT actually executing commands."
-      putStrLn (unwords tsArgs)
+      logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
     else do
-      undefined
+      logL logger INFO $ "Running: " ++ escapedArgs
+      callProcess "tailscale" tsArgs
 
 -- Parse our config file.  May throw AesonException on failure.
 loadConfig :: FilePath -> IO TSConfig
@@ -55,7 +59,7 @@ generateTailscaleArgs :: TSConfig -> IO [String]
 generateTailscaleArgs config = do
   hostIPs <- resolveHostnames (tsHostRoutes config)
   let mergedRoutes = tsRoutes config ++ map ipToHostRoute hostIPs
-  return $ [ "tailscale", "set"
+  return $ [ "set"
            , "--advertise-routes=" ++ intercalate "," mergedRoutes
            , "--advertise-exit-node=" ++ show (tsAdvertiseExitNode config)
            ] ++ tsExtraArgs config

@@ -76,6 +76,7 @@ executable tailscale-manager
                  , bytestring
                  , optparse-applicative
                  , hslogger
+                 , process
 
     -- Directories containing source files.
     hs-source-dirs:   app
