@@ -124,7 +124,7 @@ instance FromJSON TSConfig where
   parseJSON = withObject "TSConfig" $ \obj -> do
     routes <- obj .:? "routes"
     hostRoutes <- obj .:? "hostRoutes"
-    advertiseExitNode <- obj .:? "advertisExitNode"
+    advertiseExitNode <- obj .:? "advertiseExitNode"
     extraArgs <- obj .:? "extraArgs"
     return (TSConfig { tsRoutes = fromMaybe [] routes
                      , tsHostRoutes = fromMaybe [] hostRoutes
