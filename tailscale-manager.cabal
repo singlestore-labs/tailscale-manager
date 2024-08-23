@@ -77,6 +77,8 @@ executable tailscale-manager
                  , optparse-applicative
                  , hslogger
                  , process
+                 , raw-strings-qq
+                 , prettyprinter
 
     -- Directories containing source files.
     hs-source-dirs:   app

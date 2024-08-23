@@ -1,7 +1,8 @@
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StrictData #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
@@ -15,8 +16,10 @@ import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
 import GHC.IO.Exception (IOException)
 import Network.Socket
 import Options.Applicative
+import Prettyprinter (Doc)
 import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
+import Text.RawString.QQ (r)
 
 data MyFlags
   = MyFlags
@@ -25,18 +28,37 @@ data MyFlags
   , tailscaleCmd :: FilePath
   }
 
+helpText :: Doc a
+helpText = [r|Tailscale options manager
+
+Config file example:
+
+{
+  "routes": [
+    "172.16.0.0/22",
+    "192.168.0.0/24"
+  ],
+  "hostRoutes": [
+    "google.com",
+    "1.2.3.4"
+  ],
+  "extraArgs": ["--webclient"],
+  "advertiseExitNode": false
+}|]
+
 main :: IO ()
 main = run =<< execParser opts
   where
     opts = info (myFlags <**> helper)
            (fullDesc
-            <> progDesc "Tailscale options manager"
+            <> progDescDoc (Just helpText)
             <> header "tailscale-manager")
     myFlags = MyFlags
               <$> argument str (metavar "<configfile.json>")
               <*> switch  (long "dryrun"
                           <> help "Dryrun mode")
               <*> strOption (long "tailscale"
+                             <> metavar "PATH"
                              <> help "Path to the tailscale executable"
                              <> value "tailscale")
 
