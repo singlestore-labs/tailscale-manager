@@ -1,9 +1,5 @@
-# SPDX-FileCopyrightText: 2021 Serokell <https://serokell.io/>
-#
-# SPDX-License-Identifier: CC0-1.0
-
 {
-  description = "My haskell application";
+  description = "tailscale-manager";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
@@ -20,7 +16,6 @@
         jailbreakUnbreak = pkg:
           pkgs.haskell.lib.doJailbreak (pkg.overrideAttrs (_: { meta = { }; }));
 
-        # DON'T FORGET TO PUT YOUR PACKAGE NAME HERE, REMOVING `throw`
         packageName = "tailscale-manager";
       in {
         packages.${packageName} =
