@@ -6,7 +6,9 @@
 
 module Main where
 
+import Control.Concurrent (threadDelay)
 import Control.Exception (try)
+import Control.Monad (forever, when)
 import Data.Aeson
 import Data.ByteString.Lazy qualified as LB
 import Data.Functor ((<&>))
@@ -21,11 +23,14 @@ import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
 import Text.RawString.QQ (r)
 
+type Seconds = Int
+
 data MyFlags
   = MyFlags
   { configFile :: FilePath
   , dryRun :: Bool
   , tailscaleCmd :: FilePath
+  , interval :: Seconds
   }
 
 helpText :: Doc a
@@ -55,27 +60,38 @@ main = run =<< execParser opts
             <> header "tailscale-manager")
     myFlags = MyFlags
               <$> argument str (metavar "<configfile.json>")
-              <*> switch  (long "dryrun"
+              <*> switch (long "dryrun"
                           <> help "Dryrun mode")
               <*> strOption (long "tailscale"
                              <> metavar "PATH"
                              <> help "Path to the tailscale executable"
-                             <> value "tailscale")
+                             <> value "tailscale"
+                             <> showDefault)
+              <*> option auto (long "interval"
+                               <> metavar "INT"
+                               <> help "Interval (in seconds) between runs. 0 means exit after running once."
+                               <> value 0
+                               <> showDefault)
 
 run :: MyFlags -> IO ()
 run flags = do
   config <- loadConfig (configFile flags)
   tsArgs <- generateTailscaleArgs config
-  logger' <- getLogger "tailscale-manager"
-  let logger = setLevel INFO logger'
-      escapedArgs = showCommandForUser (tailscaleCmd flags) tsArgs
-  if dryRun flags
-    then do
-      logL logger WARNING "Dry-run mode enabled."
-      logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
-    else do
-      logL logger INFO $ "Running: " ++ escapedArgs
-      callProcess (tailscaleCmd flags) tsArgs
+  logger <- getLogger "tailscale-manager" <&> setLevel INFO
+  let escapedArgs = showCommandForUser (tailscaleCmd flags) tsArgs
+      runOnce =
+        if dryRun flags
+          then logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
+          else do
+            logL logger INFO $ "Running: " ++ escapedArgs
+            callProcess (tailscaleCmd flags) tsArgs
+
+  when (dryRun flags) $
+    logL logger WARNING "Dry-run mode enabled."
+
+  if interval flags > 0
+    then forever $ runOnce >> threadDelay (interval flags * 1000000)  -- microseconds
+    else runOnce
 
 -- Parse our config file.  May throw AesonException on failure.
 loadConfig :: FilePath -> IO TSConfig
