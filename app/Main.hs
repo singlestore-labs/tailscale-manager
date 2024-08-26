@@ -35,7 +35,11 @@ data MyFlags
   }
 
 helpText :: Doc a
-helpText = [r|Tailscale options manager
+helpText = [r|Tailscale routes manager
+
+Dynamically resolves a list of hostRoutes to IP addresses,
+then tells tailscale to advertise them as /32 routes along with any
+normal CIDR routes.
 
 Config file example:
 
@@ -45,11 +49,10 @@ Config file example:
     "192.168.0.0/24"
   ],
   "hostRoutes": [
-    "google.com",
-    "1.2.3.4"
+    "special-hostname1.example",
+    "special-hostname2.example",
   ],
-  "extraArgs": ["--webclient"],
-  "advertiseExitNode": false
+  "extraArgs": ["--webclient"]
 }|]
 
 main :: IO ()
@@ -104,9 +107,7 @@ generateTailscaleArgs config = do
   hostIPs <- resolveHostnames (tsHostRoutes config)
   -- Converting to Set and back is faster than (nub . sort) on a List
   let mergedRoutes = (Set.toList . Set.fromList) (tsRoutes config ++ map ipToHostRoute hostIPs)
-  return $ [ "set"
-           , "--advertise-routes=" ++ intercalate "," mergedRoutes
-           , "--advertise-exit-node=" ++ show (tsAdvertiseExitNode config)
+  return $ [ "set", "--advertise-routes=" ++ intercalate "," mergedRoutes
            ] ++ tsExtraArgs config
 
 ipToHostRoute :: IP -> String
@@ -134,7 +135,6 @@ data TSConfig
   = TSConfig
   { tsRoutes :: [String]
   , tsHostRoutes :: [String]
-  , tsAdvertiseExitNode :: Bool
   , tsExtraArgs :: [String]
   }
   deriving Show
@@ -143,10 +143,8 @@ instance FromJSON TSConfig where
   parseJSON = withObject "TSConfig" $ \obj -> do
     routes <- obj .:? "routes"
     hostRoutes <- obj .:? "hostRoutes"
-    advertiseExitNode <- obj .:? "advertiseExitNode"
     extraArgs <- obj .:? "extraArgs"
     return (TSConfig { tsRoutes = fromMaybe [] routes
                      , tsHostRoutes = fromMaybe [] hostRoutes
-                     , tsAdvertiseExitNode = fromMaybe False advertiseExitNode
                      , tsExtraArgs = fromMaybe [] extraArgs
                      })

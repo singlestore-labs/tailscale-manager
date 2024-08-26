@@ -46,7 +46,6 @@
               text = generators.toJSON {} {
                 routes = cfg.routes;
                 hostRoutes = cfg.hostRoutes;
-                advertiseExitNode = cfg.advertiseExitNode;
                 extraArgs = cfg.extraArgs;
               };
             };
@@ -69,15 +68,15 @@
               default = [];
               description = "List of hostnames and IP addresses to add as /32 routes";
             };
-            advertiseExitNode = mkOption {
-              type = types.bool;
-              default = false;
-              description = "Advertise as a tailscale exit node?";
-            };
             extraArgs = mkOption {
               type = types.listOf types.str;
               default = [];
               description = "Extra arguments for `tailscale set`";
+            };
+            dryRun = mkOption {
+              type = types.bool;
+              default = false;
+              description = "Enable dry-run mode, don't actually apply changes.";
             };
           };
           config = mkIf cfg.enable {
@@ -86,11 +85,14 @@
               wants = ["tailscaled.service"];
               wantedBy = ["multi-user.target"];
               serviceConfig = {
-                ExecStart = lib.escapeShellArgs [
-                  "${cfg.package}/bin/tailscale-manager" configFile
-                  "--tailscale=${config.services.tailscale.package}/bin/tailscale"
-                  "--interval=${toString cfg.interval}"
-                ];
+                Type = "exec";
+                Restart = "on-failure";
+                ExecStart = lib.escapeShellArgs (
+                  [ "${cfg.package}/bin/tailscale-manager" configFile
+                    "--tailscale=${config.services.tailscale.package}/bin/tailscale"
+                    "--interval=${toString cfg.interval}"
+                  ] ++ lib.optional cfg.dryRun "--dryrun"
+                );
               };
             };
           };
