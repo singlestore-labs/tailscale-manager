@@ -15,6 +15,7 @@ import Data.Functor ((<&>))
 import Data.List (intercalate)
 import Data.IP (fromSockAddr, IP)
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
+import Data.Set qualified as Set
 import GHC.IO.Exception (IOException)
 import Network.Socket
 import Options.Applicative
@@ -79,18 +80,19 @@ run flags = do
   tsArgs <- generateTailscaleArgs config
   logger <- getLogger "tailscale-manager" <&> setLevel INFO
   let escapedArgs = showCommandForUser (tailscaleCmd flags) tsArgs
-      runOnce =
-        if dryRun flags
-          then logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
-          else do
-            logL logger INFO $ "Running: " ++ escapedArgs
-            callProcess (tailscaleCmd flags) tsArgs
+      runOnce | dryRun flags =
+                  logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
+              | otherwise = do
+                  logL logger INFO $ "Running: " ++ escapedArgs
+                  callProcess (tailscaleCmd flags) tsArgs
 
   when (dryRun flags) $
     logL logger WARNING "Dry-run mode enabled."
 
   if interval flags > 0
-    then forever $ runOnce >> threadDelay (interval flags * 1000000)  -- microseconds
+    then do
+      logL logger INFO ("Running every " ++ show (interval flags) ++ " seconds")
+      forever $ runOnce >> threadDelay (interval flags * 1000000)  -- microseconds
     else runOnce
 
 -- Parse our config file.  May throw AesonException on failure.
@@ -100,7 +102,8 @@ loadConfig fp = LB.readFile fp >>= throwDecode
 generateTailscaleArgs :: TSConfig -> IO [String]
 generateTailscaleArgs config = do
   hostIPs <- resolveHostnames (tsHostRoutes config)
-  let mergedRoutes = tsRoutes config ++ map ipToHostRoute hostIPs
+  -- Converting to Set and back is faster than (nub . sort) on a List
+  let mergedRoutes = (Set.toList . Set.fromList) (tsRoutes config ++ map ipToHostRoute hostIPs)
   return $ [ "set"
            , "--advertise-routes=" ++ intercalate "," mergedRoutes
            , "--advertise-exit-node=" ++ show (tsAdvertiseExitNode config)
