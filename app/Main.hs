@@ -20,14 +20,18 @@ import GHC.IO.Exception (IOException)
 import Network.Socket
 import Options.Applicative
 import Prettyprinter (Doc)
+import System.IO (stderr)
+import System.Log.Formatter (simpleLogFormatter)
+import System.Log.Handler (LogHandler(setFormatter))
+import System.Log.Handler.Simple (streamHandler)
 import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
 import Text.RawString.QQ (r)
 
 type Seconds = Int
 
-data MyFlags
-  = MyFlags
+data TailscaleManagerOptions
+  = TailscaleManagerOptions
   { configFile :: FilePath
   , dryRun :: Bool
   , tailscaleCmd :: FilePath
@@ -55,33 +59,43 @@ Config file example:
   "extraArgs": ["--webclient"]
 }|]
 
+myLogger :: IO Logger
+myLogger = do
+  let myFormatter = simpleLogFormatter "[$time $prio $loggername] $msg"
+  handler <- streamHandler stderr INFO <&> flip setFormatter myFormatter
+  getRootLogger <&> setLevel INFO . setHandlers [handler]
+
+tsManagerOptions :: Parser TailscaleManagerOptions
+tsManagerOptions =
+  TailscaleManagerOptions
+  <$> argument str (metavar "<configfile.json>")
+  <*> switch (long "dryrun"
+              <> help "Dryrun mode")
+  <*> strOption (long "tailscale"
+                 <> metavar "PATH"
+                 <> help "Path to the tailscale executable"
+                 <> value "tailscale"
+                 <> showDefault)
+  <*> option auto (long "interval"
+                   <> metavar "INT"
+                   <> help "Interval (in seconds) between runs. 0 means exit after running once."
+                   <> value 0
+                   <> showDefault)
+
 main :: IO ()
 main = run =<< execParser opts
   where
-    opts = info (myFlags <**> helper)
+    opts = info (tsManagerOptions <**> helper)
            (fullDesc
             <> progDescDoc (Just helpText)
             <> header "tailscale-manager")
-    myFlags = MyFlags
-              <$> argument str (metavar "<configfile.json>")
-              <*> switch (long "dryrun"
-                          <> help "Dryrun mode")
-              <*> strOption (long "tailscale"
-                             <> metavar "PATH"
-                             <> help "Path to the tailscale executable"
-                             <> value "tailscale"
-                             <> showDefault)
-              <*> option auto (long "interval"
-                               <> metavar "INT"
-                               <> help "Interval (in seconds) between runs. 0 means exit after running once."
-                               <> value 0
-                               <> showDefault)
 
-run :: MyFlags -> IO ()
+run :: TailscaleManagerOptions -> IO ()
 run flags = do
   config <- loadConfig (configFile flags)
   tsArgs <- generateTailscaleArgs config
-  logger <- getLogger "tailscale-manager" <&> setLevel INFO
+  logger <- myLogger
+
   let escapedArgs = showCommandForUser (tailscaleCmd flags) tsArgs
       runOnce | dryRun flags =
                   logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
@@ -118,10 +132,10 @@ resolveHostnames :: [HostName] -> IO [IP]
 resolveHostnames hs = mapM resolveOne hs <&> concat . catMaybes
 
 -- Resolve one hostname to a list of IPs.
--- Prints a message to stderr and returns Nothing if the lookup fails.
+-- Logs a warning and returns Nothing if the lookup fails.
 resolveOne :: HostName -> IO (Maybe [IP])
 resolveOne hostname = do
-  logger <- getLogger "resolveOne"
+  logger <- myLogger
   let hints = defaultHints { addrSocketType = Stream }
   result <- try @IOException $ getAddrInfo (Just hints) (Just hostname) Nothing
   case result of
