@@ -78,6 +78,11 @@
               default = false;
               description = "Enable dry-run mode, don't actually apply changes.";
             };
+            maxShrinkRatio = mkOption {
+              type = types.float;
+              default = 0.5;
+              description = "How much route shrinkage is allowed between subsequent runs (between 0 and 1)";
+            };
           };
           config = mkIf cfg.enable {
             systemd.services.tailscale-manager = {
@@ -91,6 +96,7 @@
                   [ "${cfg.package}/bin/tailscale-manager" configFile
                     "--tailscale=${config.services.tailscale.package}/bin/tailscale"
                     "--interval=${toString cfg.interval}"
+                    "--max-shrink-ratio=${toString cfg.maxShrinkRatio}"
                   ] ++ lib.optional cfg.dryRun "--dryrun"
                 );
               };

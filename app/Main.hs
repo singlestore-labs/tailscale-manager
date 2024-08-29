@@ -7,8 +7,9 @@
 module Main where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (try)
-import Control.Monad (forever, when)
+import Control.Exception (IOException, try)
+import Control.Monad (when, void)
+import Control.Monad.Loops (iterateM_)
 import Data.Aeson
 import Data.ByteString.Lazy qualified as LB
 import Data.Functor ((<&>))
@@ -16,7 +17,6 @@ import Data.List (intercalate)
 import Data.IP (fromSockAddr, IP)
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
 import Data.Set qualified as Set
-import GHC.IO.Exception (IOException)
 import Network.Socket
 import Options.Applicative
 import Prettyprinter (Doc)
@@ -36,14 +36,16 @@ data TailscaleManagerOptions
   , dryRun :: Bool
   , tailscaleCmd :: FilePath
   , interval :: Seconds
+  , maxShrinkRatio :: Float
   }
 
+-- This is just a multiline string.
+-- Don't be fooled by gitlab trying to syntax highlight it.
 helpText :: Doc a
 helpText = [r|Tailscale routes manager
 
-Dynamically resolves a list of hostRoutes to IP addresses,
-then tells tailscale to advertise them as /32 routes along with any
-normal CIDR routes.
+Dynamically resolves a list of hostRoutes to IP addresses, then tells tailscale
+to advertise them as /32 routes along with any normal CIDR routes.
 
 Config file example:
 
@@ -81,6 +83,11 @@ tsManagerOptions =
                    <> help "Interval (in seconds) between runs. 0 means exit after running once."
                    <> value 0
                    <> showDefault)
+  <*> option auto (long "max-shrink-ratio"
+                   <> metavar "RATIO"
+                   <> help "Max allowed route shrinkage between consecutive runs, as a ratio between 0 and 1. 1 means no limit."
+                   <> value 0.33
+                   <> showDefault)
 
 main :: IO ()
 main = run =<< execParser opts
@@ -91,38 +98,60 @@ main = run =<< execParser opts
             <> header "tailscale-manager")
 
 run :: TailscaleManagerOptions -> IO ()
-run flags = do
-  config <- loadConfig (configFile flags)
-  tsArgs <- generateTailscaleArgs config
+run options = do
+  logger <- myLogger
+  when (dryRun options) $
+    logL logger WARNING "Dry-run mode enabled."
+  if interval options > 0
+    then iterateM_ (runOnce options) Set.empty
+    else void (runOnce options Set.empty)
+
+runOnce :: TailscaleManagerOptions -> Set.Set String -> IO (Set.Set String)
+runOnce options prevRoutes = do
   logger <- myLogger
 
-  let escapedArgs = showCommandForUser (tailscaleCmd flags) tsArgs
-      runOnce | dryRun flags =
-                  logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
-              | otherwise = do
-                  logL logger INFO $ "Running: " ++ escapedArgs
-                  callProcess (tailscaleCmd flags) tsArgs
+  let invokeTailscale args =
+        if dryRun options
+          then
+            logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
+          else do
+            logL logger INFO $ "Running: " ++ escapedArgs
+            callProcess (tailscaleCmd options) args
+        where escapedArgs = showCommandForUser (tailscaleCmd options) args
 
-  when (dryRun flags) $
-    logL logger WARNING "Dry-run mode enabled."
+  let logDelay = do
+        logL logger INFO ("Sleeping for " ++ show (interval options) ++ " seconds")
+        threadDelay (interval options * 1000000)  -- microseconds
 
-  if interval flags > 0
+  config <- loadConfig (configFile options)
+  newRoutes <- generateRoutes config
+  isSane <- sanityCheck (maxShrinkRatio options) prevRoutes newRoutes
+  if isSane
     then do
-      logL logger INFO ("Running every " ++ show (interval flags) ++ " seconds")
-      forever $ runOnce >> threadDelay (interval flags * 1000000)  -- microseconds
-    else runOnce
+      invokeTailscale $ ["set", "--advertise-routes=" ++ intercalate "," (Set.toList newRoutes)] ++ tsExtraArgs config
+      logDelay
+      return newRoutes
+    else do
+      logL logger ERROR "Sanity check failed! Refusing to apply changes!"
+      logDelay
+      return prevRoutes
+
+sanityCheck :: Show a => Float -> Set.Set a -> Set.Set a -> IO Bool
+sanityCheck shrinkThreshold oldState newState = do
+  logger <- myLogger
+  let ratio = fromIntegral (length oldState) / fromIntegral (length newState)
+  when (ratio > 0) $
+    logL logger INFO $ "Shrink ratio: " ++ show ratio ++ " (Old: " ++ show oldState ++ " New: " ++ show newState ++ ")"
+  return (ratio < (1 / shrinkThreshold))
 
 -- Parse our config file.  May throw AesonException on failure.
 loadConfig :: FilePath -> IO TSConfig
 loadConfig fp = LB.readFile fp >>= throwDecode
 
-generateTailscaleArgs :: TSConfig -> IO [String]
-generateTailscaleArgs config = do
+generateRoutes :: TSConfig -> IO (Set.Set String)
+generateRoutes config = do
   hostIPs <- resolveHostnames (tsHostRoutes config)
-  -- Converting to Set and back is faster than (nub . sort) on a List
-  let mergedRoutes = (Set.toList . Set.fromList) (tsRoutes config ++ map ipToHostRoute hostIPs)
-  return $ [ "set", "--advertise-routes=" ++ intercalate "," mergedRoutes
-           ] ++ tsExtraArgs config
+  return $ Set.fromList (tsRoutes config ++ map ipToHostRoute hostIPs)
 
 ipToHostRoute :: IP -> String
 ipToHostRoute ip = show ip ++ "/32"
