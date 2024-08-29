@@ -8,21 +8,22 @@ module Main where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, try)
-import Control.Monad (when, void)
+import Control.Monad (void, when)
 import Control.Monad.Loops (iterateM_)
 import Data.Aeson
+import Data.Aeson.IP ()
 import Data.ByteString.Lazy qualified as LB
 import Data.Functor ((<&>))
+import Data.IP (IP (IPv4, IPv6), IPRange (IPv4Range, IPv6Range), fromSockAddr, makeAddrRange)
 import Data.List (intercalate)
-import Data.IP (fromSockAddr, IP)
-import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Network.Socket
 import Options.Applicative
 import Prettyprinter (Doc)
 import System.IO (stderr)
 import System.Log.Formatter (simpleLogFormatter)
-import System.Log.Handler (LogHandler(setFormatter))
+import System.Log.Handler (LogHandler (setFormatter))
 import System.Log.Handler.Simple (streamHandler)
 import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
@@ -106,7 +107,7 @@ run options = do
     then iterateM_ (runOnce options) Set.empty
     else void (runOnce options Set.empty)
 
-runOnce :: TailscaleManagerOptions -> Set.Set String -> IO (Set.Set String)
+runOnce :: TailscaleManagerOptions -> Set.Set IPRange -> IO (Set.Set IPRange)
 runOnce options prevRoutes = do
   logger <- myLogger
 
@@ -128,7 +129,7 @@ runOnce options prevRoutes = do
   isSane <- sanityCheck (maxShrinkRatio options) prevRoutes newRoutes
   if isSane
     then do
-      invokeTailscale $ ["set", "--advertise-routes=" ++ intercalate "," (Set.toList newRoutes)] ++ tsExtraArgs config
+      invokeTailscale $ ["set", "--advertise-routes=" ++ intercalate "," (map show $ Set.toList newRoutes)] ++ tsExtraArgs config
       logDelay
       return newRoutes
     else do
@@ -136,6 +137,8 @@ runOnce options prevRoutes = do
       logDelay
       return prevRoutes
 
+-- Return false if the new route list is too much shorter than the old list
+-- Log the shrink delta if it's greater than 0 (is this excessively verbose?)
 sanityCheck :: Show a => Float -> Set.Set a -> Set.Set a -> IO Bool
 sanityCheck shrinkThreshold oldState newState = do
   logger <- myLogger
@@ -148,13 +151,16 @@ sanityCheck shrinkThreshold oldState newState = do
 loadConfig :: FilePath -> IO TSConfig
 loadConfig fp = LB.readFile fp >>= throwDecode
 
-generateRoutes :: TSConfig -> IO (Set.Set String)
+-- Do all the hostname resolution and concat the results with static routes from
+-- the config
+generateRoutes :: TSConfig -> IO (Set.Set IPRange)
 generateRoutes config = do
   hostIPs <- resolveHostnames (tsHostRoutes config)
   return $ Set.fromList (tsRoutes config ++ map ipToHostRoute hostIPs)
 
-ipToHostRoute :: IP -> String
-ipToHostRoute ip = show ip ++ "/32"
+ipToHostRoute :: IP -> IPRange
+ipToHostRoute (IPv4 ip) = IPv4Range (makeAddrRange ip 32)
+ipToHostRoute (IPv6 ip) = IPv6Range (makeAddrRange ip 128)
 
 -- Resolve a list of hostnames to a concatenated list of IPs.
 resolveHostnames :: [HostName] -> IO [IP]
@@ -176,7 +182,7 @@ resolveOne hostname = do
 
 data TSConfig
   = TSConfig
-  { tsRoutes :: [String]
+  { tsRoutes :: [IPRange]
   , tsHostRoutes :: [String]
   , tsExtraArgs :: [String]
   }
