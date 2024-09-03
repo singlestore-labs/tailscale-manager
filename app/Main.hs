@@ -66,7 +66,7 @@ myLogger :: IO Logger
 myLogger = do
   let myFormatter = simpleLogFormatter "[$time $prio $loggername] $msg"
   handler <- streamHandler stderr INFO <&> flip setFormatter myFormatter
-  getRootLogger <&> setLevel INFO . setHandlers [handler]
+  getLogger "tailscale-manager" <&> setLevel INFO . setHandlers [handler]
 
 tsManagerOptions :: Parser TailscaleManagerOptions
 tsManagerOptions =
@@ -100,6 +100,8 @@ main = run =<< execParser opts
 
 run :: TailscaleManagerOptions -> IO ()
 run options = do
+  -- Clear the default root log handler to prevent duplicate messages
+  updateGlobalLogger rootLoggerName removeHandler
   logger <- myLogger
   when (dryRun options) $
     logL logger WARNING "Dry-run mode enabled."
@@ -121,31 +123,28 @@ runOnce options prevRoutes = do
         where escapedArgs = showCommandForUser (tailscaleCmd options) args
 
   let logDelay = do
-        logL logger INFO ("Sleeping for " ++ show (interval options) ++ " seconds")
+        when (interval options > 0) $
+          logL logger INFO ("Sleeping for " ++ show (interval options) ++ " seconds")
         threadDelay (interval options * 1000000)  -- microseconds
 
   config <- loadConfig (configFile options)
   newRoutes <- generateRoutes config
-  isSane <- sanityCheck (maxShrinkRatio options) prevRoutes newRoutes
-  if isSane
+  let shrinkage = shrinkRatio prevRoutes newRoutes
+  if shrinkage < maxShrinkRatio options
     then do
       invokeTailscale $ ["set", "--advertise-routes=" ++ intercalate "," (map show $ Set.toList newRoutes)] ++ tsExtraArgs config
       logDelay
       return newRoutes
     else do
       logL logger ERROR "Sanity check failed! Refusing to apply changes!"
+      logL logger ERROR ("Shrink ratio: " ++ show shrinkage ++
+                         " (Old: " ++ show (Set.toList prevRoutes) ++
+                         " New: " ++ show (Set.toList newRoutes) ++ ")")
       logDelay
       return prevRoutes
 
--- Return false if the new route list is too much shorter than the old list
--- Log the shrink delta if it's greater than 0 (is this excessively verbose?)
-sanityCheck :: Show a => Float -> Set.Set a -> Set.Set a -> IO Bool
-sanityCheck shrinkThreshold oldState newState = do
-  logger <- myLogger
-  let ratio = fromIntegral (length oldState) / fromIntegral (length newState)
-  when (ratio > 0) $
-    logL logger INFO $ "Shrink ratio: " ++ show ratio ++ " (Old: " ++ show oldState ++ " New: " ++ show newState ++ ")"
-  return (ratio < (1 / shrinkThreshold))
+shrinkRatio :: Foldable t => t a -> t a -> Float
+shrinkRatio old new = 1 - (1 / (fromIntegral (length old) / fromIntegral (length new)))
 
 -- Parse our config file.  May throw AesonException on failure.
 loadConfig :: FilePath -> IO TSConfig
