@@ -8,7 +8,7 @@ module TailscaleManager where
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (IOException, try)
-import Control.Monad (void, when)
+import Control.Monad (unless, void, when)
 import Control.Monad.Loops (iterateM_)
 import Data.Aeson
 import Data.Aeson.IP ()
@@ -106,7 +106,7 @@ run options = do
   updateGlobalLogger rootLoggerName removeHandler
   logger <- myLogger
   when (dryRun options) $
-    logL logger WARNING "Dry-run mode enabled."
+    logL logger WARNING "Dry-run mode enabled. Will not actually apply changes."
   if interval options > 0
     then iterateM_ (runOnce options) S.empty
     else void (runOnce options S.empty)
@@ -120,9 +120,9 @@ runOnce options prevRoutes = do
   let invokeTailscale args =
         if dryRun options
           then
-            logL logger INFO $ "(not actually) Runnning: " ++ escapedArgs
+            logL logger DEBUG $ "(not actually) Running: " ++ escapedArgs
           else do
-            logL logger INFO $ "Running: " ++ escapedArgs
+            logL logger DEBUG $ "Running: " ++ escapedArgs
             callProcess (tailscaleCmd options) args
         where escapedArgs = showCommandForUser (tailscaleCmd options) args
 
@@ -133,6 +133,9 @@ runOnce options prevRoutes = do
 
   config <- loadConfig (configFile options)
   newRoutes <- generateRoutes config
+
+  logDiff prevRoutes newRoutes
+
   let shrinkage = shrinkRatio prevRoutes newRoutes
   if shrinkage < maxShrinkRatio options
     then do
@@ -141,11 +144,26 @@ runOnce options prevRoutes = do
       return newRoutes
     else do
       logL logger ERROR "Sanity check failed! Refusing to apply changes!"
-      logL logger ERROR ("Shrink ratio: " ++ show shrinkage ++
-                         " (Old: " ++ show (S.toList prevRoutes) ++
-                         " New: " ++ show (S.toList newRoutes) ++ ")")
+      logL logger ERROR ("Shrink ratio: " ++ show shrinkage)
       logDelay
       return prevRoutes
+
+-- |Emit a log message describing the difference between old and new route sets.
+logDiff :: Set IPRange -> Set IPRange -> IO ()
+logDiff prevRoutes newRoutes = do
+  logger <- myLogger
+
+  logL logger INFO (show (length routesToAdd)     ++ " to add, " ++
+                    show (length routesToRemove)  ++ " to remove, " ++
+                    show (length routesUnchanged) ++ " routes unchanged")
+  unless (null routesToAdd) $
+    logL logger INFO ("Routes to add: "    ++ unwords (map show (S.toList routesToAdd)))
+  unless (null routesToRemove) $
+    logL logger INFO ("Routes to remove: " ++ unwords (map show (S.toList routesToRemove)))
+  where
+    routesToAdd     = S.difference newRoutes prevRoutes
+    routesToRemove  = S.difference prevRoutes newRoutes
+    routesUnchanged = S.intersection prevRoutes newRoutes
 
 -- |Compute how much the smaller the new set is vs old.
 --
