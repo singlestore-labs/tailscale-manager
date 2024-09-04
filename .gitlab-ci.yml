@@ -1,0 +1,5 @@
+image: nixos/nix:2.18.5
+
+build:
+  script:
+    - nix build --print-build-logs --extra-experimental-features "nix-command flakes"
