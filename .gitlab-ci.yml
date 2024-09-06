@@ -1,5 +1,12 @@
 image: nixos/nix:2.18.5
 
-build:
+test:
+  artifacts:
+    when: always
+    paths: ["junit.xml"]
+    reports:
+      junit: junit.xml
   script:
-    - nix build --print-build-logs --extra-experimental-features "nix-command flakes"
+    - mkdir -p ~/.config/nix; echo "extra-experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+    - nix build .#default.testreport --print-build-logs
+    - cp result-testreport/junit.xml .

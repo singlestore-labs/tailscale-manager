@@ -18,13 +18,17 @@
 
         packageName = "tailscale-manager";
       in {
-        packages.${packageName} =
+        packages.${packageName} = (
           haskellPackages.callCabal2nix packageName self rec {
             # Dependency overrides go here
-          };
+          }).overrideAttrs (x: {
+            outputs = x.outputs ++ ["testreport"];
+            preCheck = ''
+              checkFlagsArray+=("--test-options=--xml=$testreport/junit.xml")
+            '';
+          });
 
         packages.default = self.packages.${system}.${packageName};
-        defaultPackage = self.packages.${system}.default;
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
@@ -34,7 +38,6 @@
           ];
           inputsFrom = map (__getAttr "env") (__attrValues self.packages.${system});
         };
-        devShell = self.devShells.${system}.default;
 
         nixosModules.default = self.nixosModules.${system}.tailscale-manager;
         nixosModules.tailscale-manager = { config, lib, pkgs, ... }:
