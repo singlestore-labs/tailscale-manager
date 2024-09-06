@@ -108,7 +108,9 @@ run options = do
   when (dryRun options) $
     logL logger WARNING "Dry-run mode enabled. Will not actually apply changes."
   if interval options > 0
-    then iterateM_ (runOnce options) S.empty
+    then do
+      logL logger INFO $ "Running every " ++ show (interval options) ++ " seconds"
+      iterateM_ (runOnce options) S.empty
     else void (runOnce options S.empty)
 
 runOnce :: TailscaleManagerOptions  -- ^ Commandline options
@@ -128,7 +130,7 @@ runOnce options prevRoutes = do
 
   let logDelay = do
         when (interval options > 0) $
-          logL logger INFO ("Sleeping for " ++ show (interval options) ++ " seconds")
+          logL logger DEBUG ("Sleeping for " ++ show (interval options) ++ " seconds")
         threadDelay (interval options * 1000000)  -- microseconds
 
   config <- loadConfig (configFile options)
