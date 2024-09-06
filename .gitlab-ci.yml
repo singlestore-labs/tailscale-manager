@@ -1,12 +1,36 @@
-image: nixos/nix:2.18.5
-
-test:
+build:
+  stage: build
+  image: nixos/nix:2.18.5
   artifacts:
     when: always
-    paths: ["junit.xml"]
+    paths:
+      - junit.xml
+      - public/
     reports:
       junit: junit.xml
-  script:
+  before_script:
     - mkdir -p ~/.config/nix; echo "extra-experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+  script:
     - nix build .#default.testreport --print-build-logs
+    - nix build .#default.doc
+  after_script:
     - cp result-testreport/junit.xml .
+    - cp -r result-doc/share/doc/tailscale-manager-*/html/ public/
+
+pages:
+  stage: deploy
+  only:
+    variables: ["$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH"]
+  environment:
+    name: docs
+    url: "$CI_PAGES_URL"
+  image: busybox
+  variables:
+    GIT_STRATEGY: "none"
+  dependencies:
+    - build
+  script:
+    - echo "Pages accessible through $CI_PAGES_URL"
+  artifacts:
+    paths:
+      - public/
