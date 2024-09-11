@@ -70,4 +70,4 @@ test-suite tailscale-manager-tests
       , HUnit-approx ^>= 1.1
       , tasty ^>= 1.4.3
       , tasty-ant-xml ^>= 1.1.9
-      , tasty-hunit ^>= 0.10.2
+      , tasty-hunit ^>= 0.10.1
