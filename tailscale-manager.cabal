@@ -7,7 +7,7 @@ name:               tailscale-manager
 -- PVP summary:     +-+------- breaking API changes
 --                  | | +----- non-breaking API additions
 --                  | | | +--- code changes with no API change
-version:            0.1.0.0
+version:            0.1.1.0
 -- A short (one-line) description of the package.
 -- synopsis:
 -- A longer description of the package.
@@ -56,7 +56,18 @@ executable tailscale-manager
 
 library
     import:          warnings, deps
-    exposed-modules: TailscaleManager
+    default-extensions:
+        ImportQualifiedPost
+      , OverloadedStrings
+      , QuasiQuotes
+      , StrictData
+      , TypeApplications
+    exposed-modules:
+        TailscaleManager
+      , TailscaleManager.Config
+      , TailscaleManager.Discovery.AWSManagedPrefixList
+      , TailscaleManager.Discovery.DNS
+      , TailscaleManager.Logging
     hs-source-dirs:  src
 
 test-suite tailscale-manager-tests

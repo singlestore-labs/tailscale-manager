@@ -1,34 +1,24 @@
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE StrictData #-}
-{-# LANGUAGE TypeApplications #-}
+-- | Tailscale Routes Manager
 
 module TailscaleManager where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (IOException, try)
 import Control.Monad (unless, void, when)
 import Control.Monad.Loops (iterateM_)
-import Data.Aeson
-import Data.Aeson.IP ()
-import Data.ByteString.Lazy qualified as LB
-import Data.Functor ((<&>))
-import Data.IP (IP (IPv4, IPv6), IPRange (IPv4Range, IPv6Range), fromSockAddr, makeAddrRange)
+import Data.IP (IP (IPv4, IPv6), IPRange (IPv4Range, IPv6Range), makeAddrRange)
 import Data.List (intercalate)
-import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import Data.Set (Set)
 import Data.Set qualified as S
-import Network.Socket
 import Options.Applicative
 import Prettyprinter (Doc)
-import System.IO (stderr)
-import System.Log.Formatter (simpleLogFormatter)
-import System.Log.Handler (LogHandler (setFormatter))
-import System.Log.Handler.Simple (streamHandler)
 import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
 import Text.RawString.QQ (r)
+
+import TailscaleManager.Config
+import TailscaleManager.Discovery.AWSManagedPrefixList ()
+import TailscaleManager.Discovery.DNS (resolveHostnames)
+import TailscaleManager.Logging (myLogger)
 
 type Seconds = Int
 
@@ -61,14 +51,11 @@ Config file example:
     "special-hostname1.example",
     "special-hostname2.example",
   ],
+  "awsManagedPrefixLists": [
+    "pl-02761f4a40454a3c9"
+  ],
   "extraArgs": ["--webclient"]
 }|]
-
-myLogger :: IO Logger
-myLogger = do
-  let myFormatter = simpleLogFormatter "[$time $prio $loggername] $msg"
-  handler <- streamHandler stderr INFO <&> flip setFormatter myFormatter
-  getLogger "tailscale-manager" <&> setLevel INFO . setHandlers [handler]
 
 tsManagerOptions :: Parser TailscaleManagerOptions
 tsManagerOptions =
@@ -177,10 +164,6 @@ shrinkRatio :: Foldable t
             -> Double    -- ^ Shrink ratio
 shrinkRatio old new = 1 - (1 / (fromIntegral (length old) / fromIntegral (length new)))
 
--- |Parse our config file.  May throw AesonException on failure.
-loadConfig :: FilePath -> IO TSConfig
-loadConfig fp = LB.readFile fp >>= throwDecode
-
 -- |Do all the hostname resolution and concat the results with static routes from
 -- the config.
 generateRoutes :: TSConfig -> IO (Set IPRange)
@@ -198,41 +181,3 @@ generateRoutes config = do
 ipToHostRoute :: IP -> IPRange
 ipToHostRoute (IPv4 ip) = IPv4Range (makeAddrRange ip 32)
 ipToHostRoute (IPv6 ip) = IPv6Range (makeAddrRange ip 128)
-
--- |Resolve a list of hostnames to a concatenated list of IPs.
-resolveHostnames :: [HostName] -> IO [IP]
-resolveHostnames hs = mapM resolveOne hs <&> concat . catMaybes
-
--- |Resolve one hostname to a list of IPs.
--- Logs a warning and returns Nothing if the lookup fails.
-resolveOne :: HostName -> IO (Maybe [IP])
-resolveOne hostname = do
-  logger <- myLogger
-  let hints = defaultHints { addrSocketType = Stream }
-  result <- try @IOException $ getAddrInfo (Just hints) (Just hostname) Nothing
-  case result of
-    Left err -> do
-      logL logger WARNING (show err)
-      return Nothing
-    Right addrInfos ->
-      return $ Just (map fst (mapMaybe (fromSockAddr . addrAddress) addrInfos))
-
--- |Config file schema
-data TSConfig
-  = TSConfig
-  { tsRoutes :: [IPRange]
-  , tsHostRoutes :: [String]
-  , tsExtraArgs :: [String]
-  }
-  deriving Show
-
--- |Config file JSON parser
-instance FromJSON TSConfig where
-  parseJSON = withObject "TSConfig" $ \obj -> do
-    routes <- obj .:? "routes"
-    hostRoutes <- obj .:? "hostRoutes"
-    extraArgs <- obj .:? "extraArgs"
-    return (TSConfig { tsRoutes = fromMaybe [] routes
-                     , tsHostRoutes = fromMaybe [] hostRoutes
-                     , tsExtraArgs = fromMaybe [] extraArgs
-                     })
