@@ -71,6 +71,11 @@
               default = [];
               description = "List of hostnames and IP addresses to add as /32 routes";
             };
+            awsManagedPrefixLists = mkOption {
+              type = types.listOf types.str;
+              default = [];
+              description = "AWS prefix list IDs for route discovery";
+            };
             extraArgs = mkOption {
               type = types.listOf types.str;
               default = [];

@@ -7,6 +7,7 @@ import Data.Aeson.IP ()
 import Data.ByteString.Lazy qualified as LB
 import Data.IP (IPRange)
 import Data.Maybe (fromMaybe)
+import Data.Text
 
 -- |Parse our config file.  May throw AesonException on failure.
 loadConfig :: FilePath -> IO TSConfig
@@ -18,7 +19,7 @@ data TSConfig
   { tsRoutes :: [IPRange]
   , tsHostRoutes :: [String]
   , tsExtraArgs :: [String]
-  , tsAWSManagedPrefixLists :: [String]
+  , tsAWSManagedPrefixLists :: [Text]
   }
   deriving Show
 

@@ -28,3 +28,18 @@ resolveOne hostname = do
       return Nothing
     Right addrInfos ->
       return $ Just (map fst (mapMaybe (fromSockAddr . addrAddress) addrInfos))
+
+-- |Given a ipv4 or ipv6 IP address, return a /32 or /128 CIDR route for it.
+--
+-- >>> ipToHostRoute (read "1.1.1.1" :: IP)
+-- 1.1.1.1/32
+--
+-- >>> ipToHostRoute (read "fd00::1" :: IP)
+-- fd00::1/128
+ipToHostRoute :: IP -> IPRange
+ipToHostRoute (IPv4 ip) = IPv4Range (makeAddrRange ip 32)
+ipToHostRoute (IPv6 ip) = IPv6Range (makeAddrRange ip 128)
+
+-- | Resolve hostnames to static routes
+resolveHostnamesToRoutes :: [HostName] -> IO [IPRange]
+resolveHostnamesToRoutes hs = resolveHostnames hs <&> map ipToHostRoute

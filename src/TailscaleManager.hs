@@ -5,7 +5,7 @@ module TailscaleManager where
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless, void, when)
 import Control.Monad.Loops (iterateM_)
-import Data.IP (IP (IPv4, IPv6), IPRange (IPv4Range, IPv6Range), makeAddrRange)
+import Data.IP (IPRange)
 import Data.List (intercalate)
 import Data.Set (Set)
 import Data.Set qualified as S
@@ -16,8 +16,8 @@ import System.Process (callProcess, showCommandForUser)
 import Text.RawString.QQ (r)
 
 import TailscaleManager.Config
-import TailscaleManager.Discovery.AWSManagedPrefixList ()
-import TailscaleManager.Discovery.DNS (resolveHostnames)
+import TailscaleManager.Discovery.AWSManagedPrefixList (resolveAllPrefixLists)
+import TailscaleManager.Discovery.DNS (resolveHostnamesToRoutes)
 import TailscaleManager.Logging (myLogger)
 
 type Seconds = Int
@@ -168,16 +168,6 @@ shrinkRatio old new = 1 - (1 / (fromIntegral (length old) / fromIntegral (length
 -- the config.
 generateRoutes :: TSConfig -> IO (Set IPRange)
 generateRoutes config = do
-  hostIPs <- resolveHostnames (tsHostRoutes config)
-  return $ S.fromList (tsRoutes config ++ map ipToHostRoute hostIPs)
-
--- |Given a ipv4 or ipv6 IP address, return a /32 or /128 CIDR route for it.
---
--- >>> ipToHostRoute (read "1.1.1.1" :: IP)
--- 1.1.1.1/32
---
--- >>> ipToHostRoute (read "fd00::1" :: IP)
--- fd00::1/128
-ipToHostRoute :: IP -> IPRange
-ipToHostRoute (IPv4 ip) = IPv4Range (makeAddrRange ip 32)
-ipToHostRoute (IPv6 ip) = IPv6Range (makeAddrRange ip 128)
+  hostRoutes <- resolveHostnamesToRoutes (tsHostRoutes config)
+  managedPrefixRoutes <- resolveAllPrefixLists (tsAWSManagedPrefixLists config)
+  return $ S.fromList (tsRoutes config <> hostRoutes <> managedPrefixRoutes)

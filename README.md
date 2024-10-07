@@ -1,6 +1,35 @@
 # Tailscale routes manager
 
-**tailscale-manager** is an app that can emulate [Tailscale App Connectors](https://tailscale.com/kb/1281/app-connectors) by dynamically resolving a set of hostnames in DNS and keeping Tailscale `--advertise-routes` in sync with the resulting IP addresses.  This is most useful when using [Headscale](https://headscale.net/), which doesn't normally support App Connectors.  It runs alongside tailscaled on the node(s) where you want to advertise hostname-based routes.
+**tailscale-manager** dynamically manages Tailscale subnet route advertisements
+based on user-configurable discovery sources.  It runs alongside tailscaled on
+the node(s) where you want to advertise routes.
+
+## Supported discovery methods
+
+| config keyword          | example                       | description                |
+|:------------------------|:------------------------------|:---------------------------|
+| `routes`                | `["192.168.0.0/24"]`          | Static routes              |
+| `hostRoutes`            | `["private-app.example.com"]` | DNS hostname lookup        |
+| `awsManagedPrefixLists` | `["pl-02761f4a40454a3c9"]`    | [AWS Managed Prefix Lists] |
+
+[AWS Managed Prefix Lists]: https://docs.aws.amazon.com/vpc/latest/userguide/managed-prefix-lists.html
+
+`hostRoutes` can be used to emulate [Tailscale App Connectors] by advertising a
+set of individual IP address routes that are kept in sync with DNS lookups of a
+set of hostnames.  This is most useful when using [Headscale], which doesn't
+normally support App Connectors.
+
+[Tailscale App Connectors]: https://tailscale.com/kb/1281/app-connectors
+[Headscale]: https://headscale.net/
+
+### Possible future discovery methods
+
+- DNS SRV records
+- Extra JSON files on disk
+- Generic HTTP service discovery, similar to [Prometheus `http_sd`](https://prometheus.io/docs/prometheus/2.54/http_sd/)
+- [NetBox lists](https://github.com/devon-mar/netbox-lists)
+- Google Cloud [public-advertised-prefixes](https://cloud.google.com/sdk/gcloud/reference/compute/public-advertised-prefixes)
+- Other cloud providers?
 
 ## Example
 
@@ -15,6 +44,9 @@ Here is a sample config file, in JSON format:
   "hostRoutes": [
     "github.com",
     "private-app.example.com"
+  ],
+  "awsManagedPrefixLists": [
+    "pl-02761f4a40454a3c9"
   ]
 }
 ```
@@ -25,7 +57,12 @@ Run tailscale-manager:
 tailscale-manager your-config-file.json --interval 300
 ```
 
-The above will result in individual /32 (or /128 for ipv6) static route advertisements on your tailnet for the IP addresses that `github.com` and `private-app.example.com` resolve to, along with any static routes provided in the `routes` list.  Every 300 seconds, tailscale-manager will refresh its DNS resolution and update tailscale route advertisements accordingly.
+The above will result in individual /32 (or /128 for ipv6) route advertisements
+on your tailnet for the IP addresses that `github.com` and
+`private-app.example.com` resolve to, plus any routes found in the named AWS
+managed prefix lists, and any static routes provided in the `routes` list.
+Every 300 seconds, tailscale-manager will refresh its route discovery sources
+and update tailscale route advertisements accordingly.
 
 ## Commandline options
 
@@ -48,6 +85,9 @@ Usage: tailscale-manager <configfile.json> [--dryrun] [--tailscale PATH]
     "hostRoutes": [
       "special-hostname1.example",
       "special-hostname2.example",
+    ],
+    "awsManagedPrefixLists": [
+      "pl-02761f4a40454a3c9"
     ],
     "extraArgs": ["--webclient"]
   }
