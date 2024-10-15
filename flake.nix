@@ -50,6 +50,7 @@
                 routes = cfg.routes;
                 hostRoutes = cfg.hostRoutes;
                 extraArgs = cfg.extraArgs;
+                awsManagedPrefixLists = cfg.awsManagedPrefixLists;
               };
             };
           in {
