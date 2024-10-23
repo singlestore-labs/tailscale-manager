@@ -4,10 +4,16 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
     flake-utils.url = "github:numtide/flake-utils";
+    nix-github-actions.url = "github:nix-community/nix-github-actions";
+    nix-github-actions.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs, flake-utils, nix-github-actions }:
+    {
+      githubActions = nix-github-actions.lib.mkGithubMatrix {
+        checks = nixpkgs.lib.getAttrs [ "x86_64-linux" ] self.checks;
+      };
+    } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
@@ -29,6 +35,8 @@
           });
 
         packages.default = self.packages.${system}.${packageName};
+
+        checks.tailscale-manager = self.packages.${system}.tailscale-manager;
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
