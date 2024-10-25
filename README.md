@@ -115,7 +115,7 @@ If you use NixOS, this repository provides a flake with a NixOS module to instal
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
     tailscale-manager = {
-      url = "git+ssh://git@gitlab.com/singlestore/infra/tailscale-manager.git";
+      url = "github:singlestore-labs/tailscale-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
