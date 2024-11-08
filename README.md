@@ -1,13 +1,13 @@
 # Tailscale routes manager
 
 **tailscale-manager** dynamically manages Tailscale subnet route advertisements
-based on user-configurable discovery sources.  It runs alongside tailscaled on
+based on user-configurable discovery sources. It runs alongside tailscaled on
 the node(s) where you want to advertise routes.
 
 ## Supported discovery methods
 
 | config keyword          | example                       | description                |
-|:------------------------|:------------------------------|:---------------------------|
+| :---------------------- | :---------------------------- | :------------------------- |
 | `routes`                | `["192.168.0.0/24"]`          | Static routes              |
 | `hostRoutes`            | `["private-app.example.com"]` | DNS hostname lookup        |
 | `awsManagedPrefixLists` | `["pl-02761f4a40454a3c9"]`    | [AWS Managed Prefix Lists] |
@@ -16,7 +16,7 @@ the node(s) where you want to advertise routes.
 
 `hostRoutes` can be used to emulate [Tailscale App Connectors] by advertising a
 set of individual IP address routes that are kept in sync with DNS lookups of a
-set of hostnames.  This is most useful when using [Headscale], which doesn't
+set of hostnames. This is most useful when using [Headscale], which doesn't
 normally support App Connectors.
 
 [Tailscale App Connectors]: https://tailscale.com/kb/1281/app-connectors
@@ -104,11 +104,39 @@ Available options:
   -h,--help                Show this help text
 ```
 
+## Docker image
+
+A Docker image is built and pushed to GitHub Container Registry on each version, commit, and pull request. The image is built based on Alpine images and contains a statically-linked `tailscale-manager` binary.
+
+You can use it to build your own custom Tailscale Docker images using the following Dockerfile and `entrypoint.sh` script.
+
+```dockerfile
+# Dockerfile
+FROM ghcr.io/singlestore-labs/tailscale-manager AS tailscale-manager
+FROM tailscale/tailscale AS tailscale
+
+COPY --from=tailscale-manager /bin/tailscale-manager /bin/tailscale-manager
+
+COPY config.json <CONFIG_FILE>
+
+COPY entrypoint.sh /usr/local/bin/entrypoint
+CMD ["entrypoint"]
+```
+
+```sh
+# entrypoint.sh
+#!/bin/sh
+tailscale-manager <CONFIG_FILE> --interval 300 &
+containerboot
+```
+
+This will allow you to use Tailscale as a Docker container while having `tailscale-manager` running in the background, periodically updating routes.
+
 ## NixOS module
 
-If you use NixOS, this repository provides a flake with a NixOS module to install and run tailscale-manager as a systemd service.  You can incorporate it into your flake.nix like so:
+If you use NixOS, this repository provides a flake with a NixOS module to install and run tailscale-manager as a systemd service. You can incorporate it into your flake.nix like so:
 
-``` nix
+```nix
 {
   description = "my nixos config";
 
