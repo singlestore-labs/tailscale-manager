@@ -35,11 +35,11 @@ normally support App Connectors.
 
 Here is a sample config file, in JSON format:
 
-``` json
+```json
 {
   "routes": [
     "172.16.0.0/22",
-    "192.168.0.0/24",
+    "192.168.0.0/24"
   ],
   "hostRoutes": [
     "github.com",

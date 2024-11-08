@@ -1,4 +1,4 @@
-name: Create and publish a Docker image
+name: Docker build and push
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push-image:
+  docker-build-and-push:
     runs-on: ubuntu-latest
 
     permissions:
