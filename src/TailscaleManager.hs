@@ -11,13 +11,9 @@ import Data.Set (Set)
 import Data.Set qualified as S
 import Options.Applicative
 import Prettyprinter (Doc)
-import System.FilePath (takeExtension)
 import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
 import Text.RawString.QQ (r)
-import Data.Yaml (decodeFileEither)
-import Data.Aeson (eitherDecodeFileStrict)
-
 import TailscaleManager.Config
 import TailscaleManager.Discovery.AWSManagedPrefixList (resolveAllPrefixLists)
 import TailscaleManager.Discovery.DNS (resolveHostnamesToRoutes)
@@ -123,7 +119,7 @@ runOnce options prevRoutes = do
           logL logger DEBUG ("Sleeping for " ++ show (interval options) ++ " seconds")
         threadDelay (interval options * 1000000)  -- microseconds
 
-  config <- loadConfig (configFile options)
+  config <- TailscaleManager.Config.loadConfig (configFile options)
   newRoutes <- generateRoutes config
 
   logDiff prevRoutes newRoutes
@@ -167,26 +163,3 @@ generateRoutes config = do
   hostRoutes <- resolveHostnamesToRoutes (tsHostRoutes config)
   managedPrefixRoutes <- resolveAllPrefixLists (tsAWSManagedPrefixLists config)
   return $ S.fromList (tsRoutes config <> hostRoutes <> managedPrefixRoutes)
-
--- | Load configuration from a file, detecting format based on file extension.
-loadConfig :: FilePath -> IO TSConfig
-loadConfig path = do
-  case takeExtension path of
-    ".json" -> loadConfigFromJSON path
-    ".yaml" -> loadConfigFromYAML path
-    _       -> error "Unsupported file format. Please use .json or .yaml."
-
--- | Load configuration based on specified format.
-loadConfigFromJSON :: FilePath -> IO TSConfig
-loadConfigFromJSON path = do
-  result <- eitherDecodeFileStrict path
-  case result of
-    Left err -> error $ "Failed to parse JSON config: " ++ err
-    Right config -> return config
-
-loadConfigFromYAML :: FilePath -> IO TSConfig
-loadConfigFromYAML path = do
-  result <- decodeFileEither path
-  case result of
-    Left err -> error $ "Failed to parse YAML config: " ++ show err
-    Right config -> return config
