@@ -50,6 +50,8 @@ common deps
       , protolude ^>= 0.3.4
       , raw-strings-qq ^>= 1.1
       , text ^>= 2.0.2
+      , filepath ^>= 1.4.2
+      , yaml ^>= 0.11.8
 
 executable tailscale-manager
     import:           warnings, deps
