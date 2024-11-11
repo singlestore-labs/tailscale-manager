@@ -33,8 +33,9 @@ normally support App Connectors.
 
 ## Example
 
-Here is a sample config file, in JSON format:
+Create a configuration file in either JSON or YAML format. Here’s an example:
 
+`config.json`
 ```json
 {
   "routes": [
@@ -44,11 +45,24 @@ Here is a sample config file, in JSON format:
   "hostRoutes": [
     "github.com",
     "private-app.example.com"
-  ],
+  ],̌
   "awsManagedPrefixLists": [
     "pl-02761f4a40454a3c9"
   ]
 }
+```
+or `config.yaml`
+```yaml
+routes:
+  - "172.16.0.0/22"
+  - "192.168.0.0/24"
+hostRoutes:
+  - "special-hostname1.example"
+  - "special-hostname2.example"
+awsManagedPrefixLists:
+  - "pl-02761f4a40454a3c9"
+extraArgs:
+  - "--webclient"
 ```
 
 Run tailscale-manager:

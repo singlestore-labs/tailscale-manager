@@ -1,4 +1,4 @@
--- | Tailscale Routes Manager
+{-# LANGUAGE QuasiQuotes #-}
 
 module TailscaleManager where
 
@@ -11,9 +11,12 @@ import Data.Set (Set)
 import Data.Set qualified as S
 import Options.Applicative
 import Prettyprinter (Doc)
+import System.FilePath (takeExtension)
 import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
 import Text.RawString.QQ (r)
+import Data.Yaml (decodeFileEither)
+import Data.Aeson (eitherDecodeFileStrict)
 
 import TailscaleManager.Config
 import TailscaleManager.Discovery.AWSManagedPrefixList (resolveAllPrefixLists)
@@ -40,7 +43,7 @@ helpText = [r|Tailscale routes manager
 Dynamically resolves a list of hostRoutes to IP addresses, then tells tailscale
 to advertise them as /32 routes along with any normal CIDR routes.
 
-Config file example:
+Config file example (JSON):
 
 {
   "routes": [
@@ -49,7 +52,7 @@ Config file example:
   ],
   "hostRoutes": [
     "special-hostname1.example",
-    "special-hostname2.example",
+    "special-hostname2.example"
   ],
   "awsManagedPrefixLists": [
     "pl-02761f4a40454a3c9"
@@ -60,7 +63,7 @@ Config file example:
 tsManagerOptions :: Parser TailscaleManagerOptions
 tsManagerOptions =
   TailscaleManagerOptions
-  <$> argument str (metavar "<configfile.json>")
+  <$> argument str (metavar "<configfile>")
   <*> switch (long "dryrun"
               <> help "Dryrun mode")
   <*> strOption (long "tailscale"
@@ -137,7 +140,7 @@ runOnce options prevRoutes = do
       logDelay
       return prevRoutes
 
--- |Emit a log message describing the difference between old and new route sets.
+-- | Emit a log message describing the difference between old and new route sets.
 logDiff :: Set IPRange -> Set IPRange -> IO ()
 logDiff prevRoutes newRoutes = do
   logger <- myLogger
@@ -154,20 +157,36 @@ logDiff prevRoutes newRoutes = do
     routesToRemove  = S.difference prevRoutes newRoutes
     routesUnchanged = S.intersection prevRoutes newRoutes
 
--- |Compute how much the smaller the new set is vs old.
---
--- >>> shrinkRatio ["1.1.1.1/32", "2.2.2.2/32"] ["1.1.1.1/32"]
--- 0.5
-shrinkRatio :: Foldable t
-            => t a  -- ^ Old set
-            -> t a  -- ^ New set
-            -> Double    -- ^ Shrink ratio
+-- | Compute how much smaller the new set is vs old.
+shrinkRatio :: Foldable t => t a -> t a -> Double
 shrinkRatio old new = 1 - (1 / (fromIntegral (length old) / fromIntegral (length new)))
 
--- |Do all the hostname resolution and concat the results with static routes from
--- the config.
+-- | Generate routes based on config, resolving hostnames and AWS-managed prefix lists.
 generateRoutes :: TSConfig -> IO (Set IPRange)
 generateRoutes config = do
   hostRoutes <- resolveHostnamesToRoutes (tsHostRoutes config)
   managedPrefixRoutes <- resolveAllPrefixLists (tsAWSManagedPrefixLists config)
   return $ S.fromList (tsRoutes config <> hostRoutes <> managedPrefixRoutes)
+
+-- | Load configuration from a file, detecting format based on file extension.
+loadConfig :: FilePath -> IO TSConfig
+loadConfig path = do
+  case takeExtension path of
+    ".json" -> loadConfigFromJSON path
+    ".yaml" -> loadConfigFromYAML path
+    _       -> error "Unsupported file format. Please use .json or .yaml."
+
+-- | Load configuration based on specified format.
+loadConfigFromJSON :: FilePath -> IO TSConfig
+loadConfigFromJSON path = do
+  result <- eitherDecodeFileStrict path
+  case result of
+    Left err -> error $ "Failed to parse JSON config: " ++ err
+    Right config -> return config
+
+loadConfigFromYAML :: FilePath -> IO TSConfig
+loadConfigFromYAML path = do
+  result <- decodeFileEither path
+  case result of
+    Left err -> error $ "Failed to parse YAML config: " ++ show err
+    Right config -> return config
