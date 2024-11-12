@@ -13,6 +13,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  ORGANIZATION: singlestore-labs
 
 permissions:
   contents: read
@@ -73,15 +74,17 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,scope=${{ matrix.platform }},mode=max
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=${{ github.ref == 'refs/heads/main' || github.repository_owner != env.ORGANIZATION }}
 
       - name: Export digest
+        if: github.ref == 'refs/heads/main' || github.repository_owner != env.ORGANIZATION
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
+        if: github.ref == 'refs/heads/main' || github.repository_owner != env.ORGANIZATION
         uses: actions/upload-artifact@v4
         with:
           name: digests-${{ env.PLATFORM_PAIR }}
@@ -91,6 +94,7 @@ jobs:
 
   merge:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.repository_owner != 'singlestore-labs'
     needs:
       - build
     steps:
@@ -117,7 +121,6 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
             type=ref,event=tag
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=long
