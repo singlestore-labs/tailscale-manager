@@ -67,8 +67,9 @@ and update tailscale route advertisements accordingly.
 ## Commandline options
 
 ```
-Usage: tailscale-manager <configfile.json> [--dryrun] [--tailscale PATH]
-                         [--interval INT] [--max-shrink-ratio RATIO]
+Usage: tailscale-manager <configfile.json> [--dryrun] [--tailscale PATH] 
+                         [--socket SOCKET_PATH] [--interval INT] 
+                         [--max-shrink-ratio RATIO]
 
   Tailscale routes manager
 
@@ -96,6 +97,8 @@ Available options:
   --dryrun                 Dryrun mode
   --tailscale PATH         Path to the tailscale executable
                            (default: "tailscale")
+  --socket SOCKET_PATH     Path to the tailscaled socket
+                           (default: "/var/run/tailscale/tailscaled.sock")
   --interval INT           Interval (in seconds) between runs. 0 means exit
                            after running once. (default: 0)
   --max-shrink-ratio RATIO Max allowed route shrinkage between consecutive runs,
