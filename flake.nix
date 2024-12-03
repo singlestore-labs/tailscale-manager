@@ -100,6 +100,11 @@
               default = 0.5;
               description = "How much route shrinkage is allowed between subsequent runs (between 0 and 1)";
             };
+            socketPath = mkOption {
+              type = types.path;
+              default = "/var/run/tailscale/tailscaled.sock";
+              description = "Path to the tailscaled socket";
+            };
           };
           config = mkIf cfg.enable {
             systemd.services.tailscale-manager = {
@@ -112,6 +117,7 @@
                 ExecStart = lib.escapeShellArgs (
                   [ "${cfg.package}/bin/tailscale-manager" configFile
                     "--tailscale=${config.services.tailscale.package}/bin/tailscale"
+                    "--socket=${cfg.socketPath}"
                     "--interval=${toString cfg.interval}"
                     "--max-shrink-ratio=${toString cfg.maxShrinkRatio}"
                   ] ++ lib.optional cfg.dryRun "--dryrun"

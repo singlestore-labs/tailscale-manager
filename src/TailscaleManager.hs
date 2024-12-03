@@ -28,6 +28,7 @@ data TailscaleManagerOptions
   { configFile :: FilePath
   , dryRun :: Bool
   , tailscaleCmd :: FilePath
+  , socketPath :: FilePath
   , interval :: Seconds
   , maxShrinkRatio :: Double
   }
@@ -67,6 +68,11 @@ tsManagerOptions =
                  <> metavar "PATH"
                  <> help "Path to the tailscale executable"
                  <> value "tailscale"
+                 <> showDefault)
+  <*> strOption (long "socket"
+                 <> metavar "SOCKET_PATH"
+                 <> help "Path to the tailscaled socket"
+                 <> value "/var/run/tailscale/tailscaled.sock"
                  <> showDefault)
   <*> option auto (long "interval"
                    <> metavar "INT"
@@ -128,7 +134,7 @@ runOnce options prevRoutes = do
   let shrinkage = shrinkRatio prevRoutes newRoutes
   if shrinkage < maxShrinkRatio options
     then do
-      invokeTailscale $ ["set", "--advertise-routes=" ++ intercalate "," (map show $ S.toList newRoutes)] ++ tsExtraArgs config
+      invokeTailscale $ ["--socket=" ++ socketPath options, "set", "--advertise-routes=" ++ intercalate "," (map show $ S.toList newRoutes)] ++ tsExtraArgs config
       logDelay
       return newRoutes
     else do
