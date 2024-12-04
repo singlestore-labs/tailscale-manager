@@ -3,6 +3,9 @@
 *.log
 tmp/
 
+.git
+.gitignore
+
 .direnv/
 
 dist-newstyle/
