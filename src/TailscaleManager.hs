@@ -41,7 +41,7 @@ helpText = [r|Tailscale routes manager
 Dynamically resolves a list of hostRoutes to IP addresses, then tells tailscale
 to advertise them as /32 routes along with any normal CIDR routes.
 
-Config file example:
+Config file example (JSON):
 
 {
   "routes": [
@@ -50,7 +50,7 @@ Config file example:
   ],
   "hostRoutes": [
     "special-hostname1.example",
-    "special-hostname2.example",
+    "special-hostname2.example"
   ],
   "awsManagedPrefixLists": [
     "pl-02761f4a40454a3c9"
@@ -61,7 +61,7 @@ Config file example:
 tsManagerOptions :: Parser TailscaleManagerOptions
 tsManagerOptions =
   TailscaleManagerOptions
-  <$> argument str (metavar "<configfile.json>")
+  <$> argument str (metavar "<configfile>")
   <*> switch (long "dryrun"
               <> help "Dryrun mode")
   <*> strOption (long "tailscale"
@@ -143,7 +143,7 @@ runOnce options prevRoutes = do
       logDelay
       return prevRoutes
 
--- |Emit a log message describing the difference between old and new route sets.
+-- | Emit a log message describing the difference between old and new route sets.
 logDiff :: Set IPRange -> Set IPRange -> IO ()
 logDiff prevRoutes newRoutes = do
   logger <- myLogger
@@ -170,8 +170,7 @@ shrinkRatio :: Foldable t
             -> Double    -- ^ Shrink ratio
 shrinkRatio old new = 1 - (1 / (fromIntegral (length old) / fromIntegral (length new)))
 
--- |Do all the hostname resolution and concat the results with static routes from
--- the config.
+-- | Generate routes based on config, resolving hostnames and AWS-managed prefix lists.
 generateRoutes :: TSConfig -> IO (Set IPRange)
 generateRoutes config = do
   hostRoutes <- resolveHostnamesToRoutes (tsHostRoutes config)

@@ -3,15 +3,14 @@
 module TailscaleManager.Config where
 
 import Data.Aeson
+import Data.Aeson (eitherDecodeFileStrict)
 import Data.Aeson.IP ()
 import Data.ByteString.Lazy qualified as LB
 import Data.IP (IPRange)
 import Data.Maybe (fromMaybe)
 import Data.Text
-
--- |Parse our config file.  May throw AesonException on failure.
-loadConfig :: FilePath -> IO TSConfig
-loadConfig fp = LB.readFile fp >>= throwDecode
+import System.FilePath (takeExtension)
+import Data.Yaml (decodeFileEither)
 
 -- |Config file schema
 data TSConfig
@@ -35,3 +34,27 @@ instance FromJSON TSConfig where
                      , tsExtraArgs = fromMaybe [] extraArgs
                      , tsAWSManagedPrefixLists = fromMaybe [] awsManagedPrefixLists
                      })
+
+-- | Load configuration from a file, detecting format based on file extension.
+loadConfig :: FilePath -> IO TSConfig
+loadConfig path = do
+  case takeExtension path of
+    ".json" -> loadConfigFromJSON path
+    ".yaml" -> loadConfigFromYAML path
+    _       -> error "Unsupported file format. Please use .json or .yaml."
+
+-- | Load configuration from a JSON file.
+loadConfigFromJSON :: FilePath -> IO TSConfig
+loadConfigFromJSON path = do
+  result <- eitherDecodeFileStrict path
+  case result of
+    Left err -> error $ "Failed to parse JSON config: " ++ err
+    Right config -> return config
+
+-- | Load configuration from a YAML file.
+loadConfigFromYAML :: FilePath -> IO TSConfig
+loadConfigFromYAML path = do
+  result <- decodeFileEither path
+  case result of
+    Left err -> error $ "Failed to parse YAML config: " ++ show err
+    Right config -> return config
