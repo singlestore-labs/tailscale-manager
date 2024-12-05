@@ -45,7 +45,7 @@ Create a configuration file in either JSON or YAML format. Here’s an example:
   "hostRoutes": [
     "github.com",
     "private-app.example.com"
-  ],̌
+  ],
   "awsManagedPrefixLists": [
     "pl-02761f4a40454a3c9"
   ]

@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+-- | Tailscale Routes Manager
 
 module TailscaleManager where
 
@@ -14,6 +14,7 @@ import Prettyprinter (Doc)
 import System.Log.Logger
 import System.Process (callProcess, showCommandForUser)
 import Text.RawString.QQ (r)
+
 import TailscaleManager.Config
 import TailscaleManager.Discovery.AWSManagedPrefixList (resolveAllPrefixLists)
 import TailscaleManager.Discovery.DNS (resolveHostnamesToRoutes)
@@ -119,7 +120,7 @@ runOnce options prevRoutes = do
           logL logger DEBUG ("Sleeping for " ++ show (interval options) ++ " seconds")
         threadDelay (interval options * 1000000)  -- microseconds
 
-  config <- TailscaleManager.Config.loadConfig (configFile options)
+  config <- loadConfig (configFile options)
   newRoutes <- generateRoutes config
 
   logDiff prevRoutes newRoutes
@@ -153,8 +154,14 @@ logDiff prevRoutes newRoutes = do
     routesToRemove  = S.difference prevRoutes newRoutes
     routesUnchanged = S.intersection prevRoutes newRoutes
 
--- | Compute how much smaller the new set is vs old.
-shrinkRatio :: Foldable t => t a -> t a -> Double
+-- |Compute how much the smaller the new set is vs old.
+--
+-- >>> shrinkRatio ["1.1.1.1/32", "2.2.2.2/32"] ["1.1.1.1/32"]
+-- 0.5
+shrinkRatio :: Foldable t
+            => t a  -- ^ Old set
+            -> t a  -- ^ New set
+            -> Double    -- ^ Shrink ratio
 shrinkRatio old new = 1 - (1 / (fromIntegral (length old) / fromIntegral (length new)))
 
 -- | Generate routes based on config, resolving hostnames and AWS-managed prefix lists.
