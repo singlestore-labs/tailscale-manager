@@ -111,9 +111,16 @@
               after = ["tailscaled.service"];
               wants = ["tailscaled.service"];
               wantedBy = ["multi-user.target"];
+              # Never give up on trying to restart
+              startLimitIntervalSec = 0;
               serviceConfig = {
                 Type = "exec";
-                Restart = "on-failure";
+                Restart = "always";
+                # Restart at increasing intervals to avoid things like EC2
+                # metadata service rate limits
+                RestartSec = 1;
+                RestartSteps = 30;
+                RestartMaxDelaySec = 60;
                 ExecStart = lib.escapeShellArgs (
                   [ "${cfg.package}/bin/tailscale-manager" configFile
                     "--tailscale=${config.services.tailscale.package}/bin/tailscale"
