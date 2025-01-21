@@ -38,6 +38,8 @@
 
         checks.tailscale-manager = self.packages.${system}.tailscale-manager;
 
+        checks.vm-test = pkgs.callPackage ./nix/vm-test.nix { inherit self; };
+
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             haskellPackages.haskell-language-server # you must build it with your ghc to work
