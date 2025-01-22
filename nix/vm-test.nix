@@ -1,4 +1,4 @@
-{ self, lib, pkgs, system, ... }:
+{ self, lib, pkgs, ... }:
 
 let fakeTailscale = pkgs.writeScriptBin "tailscale" ''
   #!/bin/sh
@@ -8,7 +8,7 @@ in
 pkgs.nixosTest {
   name = "tailscale-manager";
   nodes.machine1 = { config, pkgs, ... }: {
-    imports = [ self.nixosModules.${system}.tailscale-manager ];
+    imports = [ self.nixosModules.tailscale-manager ];
     services.tailscale.package = fakeTailscale;
     services.tailscale-manager = {
       enable = true;
