@@ -3,9 +3,7 @@
 module TailscaleManager.Config where
 
 import Data.Aeson
-import Data.Aeson (eitherDecodeFileStrict)
 import Data.Aeson.IP ()
-import Data.ByteString.Lazy qualified as LB
 import Data.IP (IPRange)
 import Data.Maybe (fromMaybe)
 import Data.Text
