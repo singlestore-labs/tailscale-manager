@@ -173,6 +173,8 @@ If you use NixOS, this repository provides a flake with a NixOS module to instal
         tailscale-manager.nixosModules.default
         ({ config, lib, pkgs, ... }:
          {
+           nixpkgs.overlays = [ tailscale-manager.overlays.default ];
+
            services.tailscale.enable = true;
 
            services.tailscale-manager = {
