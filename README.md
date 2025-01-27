@@ -158,7 +158,7 @@ If you use NixOS, this repository provides a flake with a NixOS module to instal
   description = "my nixos config";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
     tailscale-manager = {
       url = "github:singlestore-labs/tailscale-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -170,7 +170,7 @@ If you use NixOS, this repository provides a flake with a NixOS module to instal
     nixosConfigurations.default = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        tailscale-manager.nixosModules.x86_64-linux.default
+        tailscale-manager.nixosModules.default
         ({ config, lib, pkgs, ... }:
          {
            services.tailscale.enable = true;
