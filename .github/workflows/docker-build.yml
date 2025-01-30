@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
       matrix:
@@ -53,9 +53,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=long
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -70,7 +67,6 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          platforms: ${{ matrix.platform }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,scope=${{ matrix.platform }},mode=max
           labels: ${{ steps.meta.outputs.labels }}
